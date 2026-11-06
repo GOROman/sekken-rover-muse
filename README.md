@@ -1,17 +1,100 @@
-# せっけんロボ ミューズ — 制御骨格（シミュレーション段階）
+# Sekken Rover Muse （せっけんロボ ミューズ）
 
-RDK Challenge 2026 Winter（Fun Robotics）のプロジェクト
-「せっけんロボ ミューズ」のソフトウェア骨格。
+A personal AI agent that can move around the room: a two-wheel self-balancing
+robot built on the **D-Robotics RDK X5**, connected to the author's Muse
+Gadgets ecosystem so the agent can act physically, not only in chat.
 
-- 駆動方式: **2輪・倒立振子**（IMU による姿勢制御）
-- バッテリー低下時は **チャージャーへ自動帰還**
-- 頭脳: D-Robotics RDK X5（所持済み）
+Project for the **RDK Challenge 2026 Winter** (Fun Robotics track).
+Participant: Yoshihito Kondoh (XVI Inc.)
 
-> ⚠️ **実機未検証**: IMU（M5Stack IMU Unit、注文 M5-115515）は到着見込み
-> 2026-11-10 頃で未到着。そのため現段階の検証はすべてシミュレーション上。
-> 実機での動作確認が済んだとは表記しない。
+- Drive: **two-wheel inverted pendulum**, IMU-based attitude control
+- Behavior: on low battery the robot **returns to its charger by itself**
+- Brain: D-Robotics RDK X5 (owned by the participant)
+- Agent link: Muse Gadgets — the same agent that manages the author's
+  mail, calendar and smart home also rides this robot
 
-## 何が入っているか
+> **Status (2026-11-06): Stage 1 in progress.**
+> The control skeleton below is verified in simulation (12 unit tests).
+> Hardware bring-up on the real board (flash, SSH, sensor, on-device AI) is
+> scheduled for the Nov 9–10 session, and the evidence links in this README
+> will be filled in from that session. Nothing in this repository claims
+> real-hardware results that have not been measured yet.
+> The IMU (M5Stack IMU Unit, I2C) is in transit, expected around Nov 10;
+> the Stage 1 sensor/AI evidence therefore starts with the camera path,
+> which works without the IMU.
+
+## Hardware
+
+| Part | Notes |
+|---|---|
+| D-Robotics RDK X5 | Main board, owned |
+| USB camera | Person detection / confirmation photos (Stage 1 sensor + AI) |
+| M5Stack IMU Unit (I2C) | Attitude sensing for the inverted pendulum; in transit, ETA ~Nov 10 |
+| 2-wheel chassis + encoder motors | Stage 2 (balancing on real hardware) |
+| Motor driver, battery, charging dock | Stage 2 |
+
+## Stage 1 Bring-Up (RDK X5)
+
+Procedure used for the Stage 1 evidence. Credentials, Wi-Fi passwords and
+device serials are never published in this repository.
+
+### 1. Flash the system image
+
+1. Install **RDK Studio** on the development PC (official D-Robotics tool).
+2. Download the latest officially supported RDK X5 system image.
+3. Flash the image to the board with RDK Studio and let the board boot.
+
+### 2. Connect and log in over SSH
+
+1. Connect the board by Ethernet (or join it to the local Wi-Fi).
+2. Find the board's IP address on the router / via the serial console.
+3. Log in from the development PC using the credentials in the official
+   RDK X5 documentation, then change the password immediately:
+
+```bash
+ssh root@<RDK_X5_IP>
+```
+
+4. Sanity checks once logged in:
+
+```bash
+uname -a
+cat /etc/os-release
+ip addr          # confirm network address
+ping -c 3 8.8.8.8  # confirm internet reachability
+```
+
+### 3. Sensor check
+
+USB camera:
+
+```bash
+ls /dev/video*
+```
+
+IMU over I2C (after the M5Stack IMU Unit arrives):
+
+```bash
+i2cdetect -y <bus>   # confirm the IMU answers on its I2C address
+```
+
+### 4. First AI task (on-device)
+
+Person/object detection running on the board's BPU, starting from the
+official demo zoo:
+
+```bash
+git clone https://github.com/D-Robotics/rdk_model_zoo.git
+# then follow the YOLO demo README for the RDK X5 inside the cloned repo
+```
+
+The submitted AI evidence is a screenshot of the detection demo running on
+this participant's own board.
+
+## Control Skeleton (simulation stage)
+
+「せっけんロボ ミューズ」のソフトウェア骨格。現段階の検証はすべて
+シミュレーション上で行っている。
 
 | モジュール | 内容 |
 |---|---|
@@ -22,35 +105,77 @@ RDK Challenge 2026 Winter（Fun Robotics）のプロジェクト
 | `sekken_rover/robot.py` | 状態機械: balancing → returning → charging、転倒保護 |
 | `sekken_rover/sim.py` | シミュレーション実行（バランス／バッテリー帰還の2シナリオ） |
 
-## 動かし方
+### Run it
 
 ```bash
-# テスト（標準ライブラリのみ、追加インストール不要）
+# Tests (Python standard library only, nothing to install)
 python3 -m unittest discover -s tests -v
 
-# 10度傾けて立て直す + 外乱からの回復
+# Recover from a 10-degree tilt + disturbance rejection
 python3 -m sekken_rover.sim balance
 
-# 残量低下 -> 自動帰還 -> ドッキング -> 充電完了まで
+# Low battery -> auto return -> docking -> charge complete
 python3 -m sekken_rover.sim battery
 ```
 
-## テストで確認していること
+### What the tests verify
 
-- 前傾・後傾のどちらにも、立て直す向きの補正出力が返る
-- 初期傾き10度から姿勢が収束する／押された外乱から回復する
-- 目標速度に追従して走行できる
-- 残量がしきい値を下回ると `battery_low` が発火し、自動帰還→ドッキング→充電完了まで遷移する
-- 残量に余裕がある間は帰還しない
-- IMU は差し替え可能で、実機スタブは未実装であることが明示される
+- Corrective output points the right way for both forward and backward tilt
+- Attitude converges from an initial 10-degree tilt; recovers from a push
+- The robot tracks a target velocity
+- Crossing the battery thresholds fires `battery_low` and walks the state
+  machine through return → docking → charge complete
+- No return is triggered while the battery is healthy
+- The IMU is swappable, and the real-hardware stub is explicitly unimplemented
 
-## IMU 到着後にやること
+## Dependencies
 
-`docs/IMU_INTEGRATION.md` に接続点と調整チェックリストをまとめている。
-要約: `M5StackImuSource` の実装（I2C・軸マッピング・バイアス補正・フィルタ）、
-PID ゲインの実機再調整、残量しきい値の実測合わせ、転倒保護の実機確認。
+| Component | Dependency |
+|---|---|
+| Control skeleton + tests | Python 3, standard library only |
+| On-device AI demos | Official `rdk_model_zoo` / `rdk-course-demos` (D-Robotics), matched to the flashed system image |
+| Flashing | RDK Studio (official) |
 
-## スコープ外（この骨格に含まないもの）
+## Troubleshooting
 
-企画書どおり対象は「2輪倒立振子」と「バッテリー低下時の自動帰還」のみ。
-人検出・追従、障害物回避、Muse 連動 API、SLAM は Stage 2 以降の別作業。
+| Symptom | Check |
+|---|---|
+| Board does not boot after flashing | Re-flash with RDK Studio; confirm the power supply meets the RDK X5 requirement and the image matches the board |
+| SSH connection refused | Board and PC on the same subnet; board fully booted; try the serial console to read the boot log |
+| Board has an IP but no internet | Gateway/DNS on the router; re-test with `ping` to the gateway first, then to a public IP |
+| USB camera not listed | Re-seat the cable, check `ls /dev/video*` and `dmesg`; MIPI cameras use a different pipeline than USB UVC |
+| Model zoo demo errors on the BPU | Demo and model versions must match the flashed system image; re-clone the zoo after an image upgrade |
+| IMU not answering on I2C | Check wiring (SDA/SCL/GND/power) and scan the correct bus with `i2cdetect` |
+
+## Stage 1 Evidence
+
+To be captured in the Nov 9–10 hardware session and linked here:
+
+- [ ] Flash + SSH evidence (screenshot)
+- [ ] Sensor evidence (camera frame / IMU read-out)
+- [ ] AI evidence (detection demo running on this board)
+- [ ] Community post (Discord, Stage 1 check-in thread)
+- [ ] Showcase PR (challenge repository, `projects/`)
+
+## After the IMU arrives
+
+`docs/IMU_INTEGRATION.md` collects the integration points and tuning
+checklist: implement `M5StackImuSource` (I2C, axis mapping, bias correction,
+filtering), re-tune the PID gains on real hardware, calibrate the battery
+thresholds against measurements, and verify the fall protection on the board.
+
+## Scope
+
+In scope for this skeleton: the two-wheel inverted pendulum and low-battery
+auto-return only. Person following, obstacle avoidance, the Muse agent API
+and SLAM are Stage 2+ work.
+
+## Safety
+
+- No Wi-Fi passwords, tokens, private keys or device serials are published.
+- Real-hardware motion tests run at reduced speed with a clear fall zone;
+  fall protection in the state machine cuts drive output on excessive tilt.
+
+## License
+
+MIT — see `LICENSE`.
