@@ -149,13 +149,13 @@ python3 -m sekken_rover.sim battery
 
 ## Stage 1 Evidence
 
-To be captured in the Nov 9–10 hardware session and linked here:
+Captured on the real board on Nov 7, 2026:
 
-- [ ] Flash + SSH evidence (screenshot)
-- [ ] Sensor evidence (camera frame / IMU read-out)
-- [ ] AI evidence (detection demo running on this board)
-- [ ] Community post (Discord, Stage 1 check-in thread)
-- [ ] Showcase PR (challenge repository, `projects/`)
+- [x] Flash + SSH evidence — RDK OS 3.5.0 Desktop on a 32GB microSD, first boot verified (rootfs auto-expanded); SSH over Ethernet (netplan reconfigured to DHCP; the wired factory default is a fixed 192.168.127.10) and Wi-Fi. Screenshots attached to the community post below
+- [x] Sensor evidence — USB camera (Insta360 Ace Pro in UVC mode) live frames with YOLOv5x detection on the BPU; the camera was pointed at the RDK X5 board itself (no people filmed, for privacy)
+- [x] AI evidence — YOLOv8x from the official pydev_demo on the BPU: 13 detections on the test image (7x person, 6x kite)
+- [x] Community post (Discord, Stage 1 completion in the introduction thread): https://discord.com/channels/1300358874280230994/1568442571301068850/1568525991733887056
+- [x] Showcase PR (challenge repository, `projects/`): https://github.com/D-Robotics/Robotics-Dream-Keeper-Challenge-Winter/pull/2
 
 ## After the IMU arrives
 
